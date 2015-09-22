@@ -1,0 +1,129 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+# Practical Machine Learning Course Project
+
+#### By Khew Kok Seong
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement Â- a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks.
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this data set, the participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+In this report we aim to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants toto predict the manner in which praticipants did the exercise.  This report covers:-     
+   * how the model is built   
+   * use of cross validation   
+   * an estimate of expected out of sample error   
+   
+The dependent variable is the `classe` variable in the training set. 
+
+## Getting and cleaning the Data
+Assume all the required packages are pre-installed, proceed to load the libraries and set the seed for reproduceability:
+```{r error=FALSE, warning=FALSE, message=FALSE}
+library(caret)
+library(randomForest) 
+library(rpart)
+library(rpart.plot)
+library(e1071)
+
+set.seed(1375)
+```
+
+Load the data sets into R and make sure that missing values are coded correctly.
+Irrelevant variables will be deleted.
+Results will be hidden from the report for clarity and space considerations.
+```{r warning=FALSE}
+# Assume both data sets are saved into the working directory, in my case, it is "C:/tmp2/coursera"
+# Some missing values are coded as string "#DIV/0!" or "" or "NA" - these will be changed to NA.
+# We notice that both data sets contain columns with all missing values - these will be deleted.  
+
+# Loading the training data set into my R session replacing all missing with "NA"
+training <- read.csv("C:/tmp2/coursera/pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+
+# Loading the testing data set 
+testing <- read.csv('C:/tmp2/coursera/pml-testing.csv', na.strings=c("NA","#DIV/0!", ""))
+
+# Check dimensions for number of variables and number of observations
+dim(training)
+dim(testing)
+
+# Delete columns with all missing values
+training<-training[,colSums(is.na(training)) == 0]
+testing <-testing[,colSums(is.na(testing)) == 0]
+```
+
+```{r}
+# Some variables are irrelevant to our current project: user_name, raw_timestamp_part_1, raw_timestamp_part_,2 cvtd_timestamp, new_window, and  num_window (columns 1 to 7). We can delete these variables.
+training <-training[,-c(1:7)]
+testing <-testing[,-c(1:7)]
+
+```
+      
+       
+## Partitioning the training data set to allow cross-validation
+In order to perform cross-validation, the training data set is partionned into 2 sets: subTraining (70%) and subTest (30%).
+This will be performed using random subsampling without replacement.
+```{r}
+subsamples <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+subTraining <- training[subsamples, ] 
+subTesting <- training[-subsamples, ]
+dim(subTraining)
+dim(subTesting)
+```
+     
+     
+### First prediction model: Using Decision Tree
+```{r}
+dt_model <- rpart(classe ~ ., data=subTraining, method="class")
+
+# Predicting:
+prediction1 <- predict(dt_model, subTesting, type = "class")
+
+# Plot of the Decision Tree
+rpart.plot(dt_model, main="Classification Tree", extra=102, under=TRUE, faclen=0)
+```
+
+
+```{r}
+# Test results on our subTesting data set:
+confusionMatrix(prediction1, subTesting$classe)
+```
+    
+    
+### Second prediction model: Using Random Forest
+```{r}
+rf_model <- randomForest(classe ~. , data=subTraining, method="class")
+
+# Predicting:
+prediction2 <- predict(rf_model, subTesting, type = "class")
+
+# Test results on subTesting data set:
+confusionMatrix(prediction2, subTesting$classe)
+```
+   
+   
+### Decision
+The random Forest model is choosen because of the accuracy for Random Forest model was 0.995 (95% CI: (0.993, 0.997)) compared to 0.745 (95% CI: (0.734, 0.756)) for Decision Tree model. The expected out-of-sample error is estimated at 0.005, or 0.5%. The expected out-of-sample error is calculated as `1 - accuracy` for predictions made against the cross-validation set. Our Test data set comprises 20 cases. With an accuracy above 99% on our cross-validation data, we are confident that very few, or none, of the test samples will be missclassified.
+
+
+## Submission
+```{r}
+# predict outcome levels on the original Testing data set using Random Forest algorithm
+predictfinal <- predict(rf_model, testing, type="class")
+predictfinal
+```
+     
+```{r}
+# Write files for submission
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(predictfinal)
+```
